@@ -1,5 +1,32 @@
-import { addLiquidity, type AddLiquidityParams } from './mira/addLiquidity.js';
-import { swapExactInput, type SwapExactInputParams } from './mira/swap.js';
+let addLiquidity: ((params: AddLiquidityParams, privateKey: string) => Promise<any>) | undefined;
+let swapExactInput: ((params: SwapExactInputParams, privateKey: string) => Promise<any>) | undefined;
+
+async function loadMiraModules() {
+  try {
+      const miraAddLiquidity = await import('./mira/addLiquidity.js');
+      addLiquidity = (params: AddLiquidityParams, privateKey: string) => {
+          return miraAddLiquidity.addLiquidity(params, privateKey);
+      };
+  } catch (error) {
+      console.warn("⚠ Mira Add Liquidity is disabled due to import issues.");
+      addLiquidity = undefined;
+  }
+
+  try {
+      const miraSwap = await import('./mira/swap.js');
+      swapExactInput = (params: SwapExactInputParams, privateKey: string) => {
+          return miraSwap.swapExactInput(params, privateKey);
+      };
+  } catch (error) {
+      console.warn("⚠ Mira Swap functionality is disabled due to import issues.");
+      swapExactInput = undefined;
+  }
+}
+
+async function initialize() {
+  await loadMiraModules(); // Load Mira dynamically
+}
+
 import { borrowAsset, type BorrowAssetParams } from './swaylend/borrow.js';
 import {
   supplyCollateral,
@@ -13,6 +40,10 @@ import { createAgent } from './agent.js';
 import type { AgentExecutor } from 'langchain/agents';
 import { getOwnBalance, type GetOwnBalanceParams } from './read/balance.js';
 import type { modelMapping } from './utils/models.js';
+import type { SwapExactInputParams } from './mira/swap.js';
+import type { AddLiquidityParams } from './mira/addLiquidity.js';
+
+initialize().catch(console.error);
 
 export interface FuelAgentConfig {
   walletPrivateKey: string;
@@ -68,8 +99,11 @@ export class FuelAgent {
   }
 
   async swapExactInput(params: SwapExactInputParams) {
-    return await swapExactInput(params, this.walletPrivateKey);
-  }
+    if (!swapExactInput) {
+        throw new Error("Mira Swap is disabled due to import issues.");
+    }
+    return await swapExactInput(params, this.walletPrivateKey); // Pass privateKey
+}
 
   async transfer(params: TransferParams) {
     return await walletTransfer(params, this.walletPrivateKey);
@@ -84,8 +118,11 @@ export class FuelAgent {
   }
 
   async addLiquidity(params: AddLiquidityParams) {
-    return await addLiquidity(params, this.walletPrivateKey);
-  }
+    if (!addLiquidity) {
+        throw new Error("Mira Add Liquidity is disabled due to import issues.");
+    }
+    return await addLiquidity(params, this.walletPrivateKey); // Pass privateKey
+}
 
   async getOwnBalance(params: GetOwnBalanceParams) {
     return await getOwnBalance(params, this.walletPrivateKey);
